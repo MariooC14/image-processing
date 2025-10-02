@@ -1,6 +1,7 @@
 """
 V1: Histogram-Equalize an image
 Put your input files inside the `input-media` folder and run this file with the file name.
+Refer to https://docs.opencv.org/4.x/d5/daf/tutorial_py_histogram_equalization.html
 """
 import sys
 import cv2 as cv
