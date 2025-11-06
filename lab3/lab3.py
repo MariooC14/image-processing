@@ -12,20 +12,21 @@ from skimage.color import rgb2gray
 from skimage.transform import resize
 
 # ----------------------- Parameters -----------------------
-DATA_DIR = 'att_faces'      # folder with s1 ... s40 subfolders, each with 1..10.pgm
+DATA_DIR = 'att_faces'  # folder with s1 ... s40 subfolders, each with 1..10.pgm
 NUM_SUBJECTS = 40
-TRAIN_PER_SUBJECT = 9       # 9 train, 1 test (the 10th)
+TRAIN_PER_SUBJECT = 9  # 9 train, 1 test (the 10th)
 TEST_PER_SUBJECT = 1
-IMAGE_SIZE = (112, 92)      # (H, W)
-K = 200                     # number of eigenfaces to use
-GIVEN_INDEX = 3             # an example index for reconstruction (1-based in MATLAB)
-USE_SAVED_DATA = True       # Set False to rebuild A and mean face
+IMAGE_SIZE = (112, 92)  # (H, W)
+K = 200  # number of eigenfaces to use
+GIVEN_INDEX = 3  # an example index for reconstruction (1-based in MATLAB)
+USE_SAVED_DATA = True  # Set False to rebuild A and mean face
 
 SAVE_FILE = 'face_data_eigenfaces_orl.npz'  # where A and mean_image are saved
 
 # Optional: new test image not in training set (set to None to skip)
 # e.g., upload 'face.jpg' to /content and set NEW_TEST_IMG_PATH = '/content/face.jpg'
 NEW_TEST_IMG_PATH = None
+
 
 # ----------------------- Utilities ------------------------
 def read_pgm(path):
@@ -34,11 +35,12 @@ def read_pgm(path):
     # imageio loads greyscale as (H, W); ensure dtype float64
     return img.astype(np.float64).reshape(-1)
 
+
 def load_training_matrix(data_dir, num_subjects, train_per_subject, image_size):
     """Build A (pixels x num_train) from ORL/AT&T training images."""
     H, W = image_size
     num_train = num_subjects * train_per_subject
-    A = np.zeros((H*W, num_train), dtype=np.float64)
+    A = np.zeros((H * W, num_train), dtype=np.float64)
     idx = 0
     for subject in range(1, num_subjects + 1):
         subject_dir = os.path.join(data_dir, f's{subject}')
@@ -48,8 +50,10 @@ def load_training_matrix(data_dir, num_subjects, train_per_subject, image_size):
             idx += 1
     return A
 
+
 def ensure_K(K, max_dim):
     return int(max(1, min(K, max_dim)))
+
 
 def tile_matrix_A(A, image_size, num_subjects, train_per_subject):
     """Visualize A similar to MATLAB reshape trick, but using a clean tiling."""
@@ -66,9 +70,11 @@ def tile_matrix_A(A, image_size, num_subjects, train_per_subject):
         tiles.append(np.hstack(row_imgs))
     return np.vstack(tiles)
 
+
 def normalize_columns(M, eps=1e-12):
     norms = np.linalg.norm(M, axis=0) + eps
     return M / norms
+
 
 # ----------------------- Load / Build ----------------------
 if USE_SAVED_DATA and os.path.exists(SAVE_FILE):
@@ -93,8 +99,16 @@ order = np.argsort(eigvals)[::-1]
 eigvals = eigvals[order]
 eigvecs_C = eigvecs_C[:, order]
 
+# Calculate % covariance for k = 1,3,5,10,20
+k_s = [1, 3, 5, 10, 20]
+total_variance = eigvals.sum()
+for k in k_s:
+    variance_k = eigvals[:k].sum()
+    pctg = variance_k / total_variance * 100.0
+    print(f"% Variance for k={k}: {pctg:.2f}%")
+
 # Eigenfaces (in pixel space) are columns of A @ eigvecs_C
-vectorL_all = A @ eigvecs_C          # (pixels, num_train)
+vectorL_all = A @ eigvecs_C  # (pixels, num_train)
 vectorL_all = normalize_columns(vectorL_all)
 
 # Use top-K eigenfaces
@@ -104,8 +118,8 @@ vectorL = vectorL_all[:, :K]
 # ----------------------- Projection onto Face space-------------------
 # Training coefficients: project each training image (columns of A) into face space
 # In MATLAB: coeff_all = A' * vectorL_all  -> shape (num_train, num_train)
-coeff_all = (A.T @ vectorL_all)              # (num_train, num_train)
-coeff = coeff_all[:, :K]                     # (num_train, K)
+coeff_all = (A.T @ vectorL_all)  # (num_train, num_train)
+coeff = coeff_all[:, :K]  # (num_train, K)
 
 # ----------------------- Subject Models --------------------
 # Mean coefficient vector per subject (across their TRAIN_PER_SUBJECT images)
@@ -125,7 +139,7 @@ for subject in range(1, NUM_SUBJECTS + 1):
     test_img_path = os.path.join(subject_dir, f'{TRAIN_PER_SUBJECT + 1}.pgm')
     test_img = imageio.imread(test_img_path).astype(np.float64).reshape(-1)
     test_img_centered = test_img - mean_image
-    test_coeff = (test_img_centered @ vectorL)    # shape (K,)
+    test_coeff = (test_img_centered @ vectorL)  # shape (K,)
 
     # Find nearest subject centroid in coefficient space
     dists = np.linalg.norm(model - test_coeff[None, :], axis=1)
@@ -160,11 +174,11 @@ gi = max(0, min(A.shape[1] - 1, GIVEN_INDEX - 1))
 original_face = (A[:, gi] + mean_image).reshape(IMAGE_SIZE)
 
 # Reconstruct using all eigenfaces
-coeff_all_example = coeff_all[gi, :]                 # shape (num_train,)
+coeff_all_example = coeff_all[gi, :]  # shape (num_train,)
 reconstructed_all = mean_image + (vectorL_all @ coeff_all_example).reshape(-1)
 
 # Reconstruct using top-K eigenfaces
-coeff_K_example = coeff[gi, :]                       # shape (K,)
+coeff_K_example = coeff[gi, :]  # shape (K,)
 reconstructed_K = mean_image + (vectorL @ coeff_K_example).reshape(-1)
 
 plt.figure(figsize=(12, 4))
