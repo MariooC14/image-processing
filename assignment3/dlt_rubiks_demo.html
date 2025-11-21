@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DLT Demo: Rubik's Cube Calibration</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --accent: #6B1C23;
+      --accent2: #00205B;
+      --light: #f5f5f5;
+    }
+    body { font-family: Segoe UI, Helvetica, Arial, sans-serif; margin: 0; background:#f6f8fb; color:#222; line-height: 1.6; }
+    header { background: linear-gradient(90deg, var(--accent), var(--accent2)); color:#fff; padding: 14px 18px; }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 6px 0 0; font-size: 13px; opacity: 0.9; }
+    .wrap {
+      display: grid;
+      grid-template-columns: minmax(320px, 380px) minmax(520px, 1fr);
+      gap: 20px;
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto 32px;
+      align-items: flex-start;
+    }
+    .wrap > :nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
+    .wrap > :nth-child(4) { grid-column: 1 / -1; grid-row: 3; }
+    .panel { background: #fff; border: 1px solid #e4e4e4; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 24px rgba(0,0,0,0.08); }
+    .panel h2 { margin: 0; padding: 12px 16px; background: var(--light); border-bottom: 1px solid #e5e5e5; font-size: 17px; }
+    .panel .content { padding: 16px; overflow: auto; }
+    canvas { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 6px; width: 100%; height: auto; }
+    #imgCanvas { max-height: 520px; }
+    @media (max-width: 1100px) {
+      .wrap { grid-template-columns: 1fr; }
+      .wrap > :nth-child(3), .wrap > :nth-child(4) { grid-column: 1 / -1; }
+    }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
+    .row label { font-size: 13px; }
+    .btn { background: var(--accent); color:#fff; border:none; padding:8px 10px; border-radius:4px; cursor:pointer; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px; text-align: right; }
+    th { background: #fafafa; text-align: center; }
+    .kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+    .kpi > div { background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 8px; text-align: center; }
+    .note { background: #FFF3E0; border-left: 4px solid var(--accent2); padding: 8px 10px; border-radius: 4px; font-size: 13px; }
+    .hint { color:#555; font-size: 12px; margin-top: 6px; }
+    .small { font-size: 12px; }
+    .muted { color:#777; }
+    .ptlist { max-height: 180px; overflow:auto; border:1px solid #eee; border-radius:6px; padding:6px; background:#fff; }
+    .matrixbox { max-height: 140px; overflow:auto; border:1px solid #eee; border-radius:6px; padding:6px; background:#fff; font-size:11px; font-family: 'Courier New', monospace; }
+    .toolbar { display:flex; gap:10px; align-items:center; flex-wrap: wrap; margin-bottom:8px; }
+    select, input[type="checkbox"] { padding:4px; }
+    .pill { background:#eef; color:#223; padding:2px 6px; border-radius:999px; font-size:12px; }
+    .footer { text-align:center; padding: 8px; font-size: 12px; color:#777; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DLT Demo: Rubik's Cube → Camera Matrix P</h1>
+    <p>Pick 3D points on a cube (non-coplanar) and click corresponding 2D points on an image, then estimate P using normalized DLT.</p>
+  </header>
+
+  <div class="wrap">
+    <!-- Left: 3D Cube selector -->
+    <div class="panel" style="min-width:320px;">
+      <h2>3D Points (Rubik's Cube)</h2>
+      <div class="content">
+        <div class="row">
+          <label>Rotation X:</label><input id="rx" type="range" min="-180" max="180" value="-20" />
+          <label>Y:</label><input id="ry" type="range" min="-180" max="180" value="30" />
+          <label>Z:</label><input id="rz" type="range" min="-180" max="180" value="0" />
+        </div>
+        <div class="toolbar">
+          <label for="setSel">Point set:</label>
+          <select id="setSel">
+            <option value="rubiks" selected>Rubik's Cube (corners + visible centers)</option>
+            <option value="corners">Corners only</option>
+            <option value="vertices">All integer grid points</option>
+          </select>
+          <label for="cubeN">Cube size:</label>
+          <select id="cubeN">
+            <option value="3" selected>3×3×3</option>
+            <option value="4">4×4×4</option>
+          </select>
+          <span class="pill" id="countBadge">0 pts</span>
+        </div>
+        <div class="hint">Rubik's cube shows all grid points at integer positions. Click points to select (rotation disabled for easier selection).</div>
+        <canvas id="cubeCanvas" width="500" height="500"></canvas>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn" id="undo3d">Undo 3D</button>
+          <button class="btn" id="clear3d">Clear 3D</button>
+          <label><input type="checkbox" id="useMM" /> Show mm</label>
+        </div>
+        <div class="ptlist small" id="list3d"></div>
+        <div class="hint">At least 6 non-coplanar points recommended.</div>
+      </div>
+    </div>
+
+    <!-- Middle: Image and 2D clicks -->
+    <div class="panel">
+      <h2>2D Image (click to add points)</h2>
+      <div class="content">
+        <div class="row" style="margin-bottom:6px;">
+          <input type="file" id="imgfile" accept="image/*" />
+          <button class="btn" id="loadDefault">Load default image</button>
+        </div>
+        <div class="hint" style="margin-bottom:6px;" id="imageInfo">Image: Loading...</div>
+        <canvas id="imgCanvas" width="800" height="480"></canvas>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn" id="undo2d">Undo 2D</button>
+          <button class="btn" id="clear2d">Clear 2D</button>
+        </div>
+        <div class="ptlist small" id="list2d"></div>
+        <div class="hint">Order must match the 3D list (point 1 ↔ point 1, etc.).</div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn" id="exportCorr">Export correspondences</button>
+          <input type="file" id="importCorr" accept="application/json" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: DLT compute and results -->
+    <div class="panel" style="min-width:360px;">
+      <h2>DLT</h2>
+      <div class="content">
+        <div class="row" style="margin-bottom:8px;">
+          <button class="btn" id="runDLT">Compute P</button>
+          <span class="muted small" id="status"></span>
+        </div>
+        <div class="note">
+          Uses Python backend with accurate SVD via NumPy (requires `python activity/dlt_server.py` running on port 8765).
+        </div>
+        <div class="kpi">
+          <div><div class="muted small"># Points</div><div id="kpiN">0</div></div>
+          <div><div class="muted small">RMSE (px)</div><div id="kpiRMSE">–</div></div>
+          <div><div class="muted small">Rank(A)</div><div id="kpiRank">–</div></div>
+        </div>
+        <h3 class="small" style="margin-top:12px;">P (3×4):</h3>
+        <table id="ptable"><tbody></tbody></table>
+        <h3 class="small" style="margin-top:12px;">Decomposition: P = K [R | t]</h3>
+        <div class="matrixbox" id="decomp"></div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn" id="alignCube">Show Camera in 3D</button>
+        </div>
+        <h3 class="small" style="margin-top:12px;">Reprojection (u,v) vs (û,v̂):</h3>
+        <div class="ptlist small" id="projList"></div>
+      </div>
+    </div>
+    
+    <!-- Fourth panel: Camera Anatomy View -->
+    <div class="panel">
+      <h2>Camera Anatomy</h2>
+      <div class="content">
+        <div class="hint">External view showing world origin, cube, and computed camera position/orientation.</div>
+        <canvas id="cameraViewCanvas" width="380" height="300"></canvas>
+        <div class="note" style="margin-top:8px; font-size:11px;">
+          <strong>Legend:</strong><br>
+          • RGB axes = World origin (X=red, Y=green, Z=blue)<br>
+          • White wireframe = Rubik's cube<br>
+          • Red sphere = Camera center (C)<br>
+          • Magenta line = Optical axis<br>
+          • Camera axes = Camera orientation (R)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">University of Galway · DLT demo · Educational use</div>
+
+  <script>
+    // ---------- Math helpers (minimal - only for display) ----------
+    function matVec(A,x){ // A(m×n) * x(n) - needed for projection
+      const m=A.length, n=A[0].length; const y=Array(m).fill(0);
+      for(let i=0;i<m;i++){
+        let s=0; for(let j=0;j<n;j++) s+=A[i][j]*x[j]; y[i]=s;
+      }
+      return y;
+    }
+
+    function projectPoint(P, X){ // X=[X,Y,Z,1] -> [u,v] - needed for reprojection display
+      const x = matVec(P, X);
+      const u = x[0]/x[2];
+      const v = x[1]/x[2];
+      return [u,v];
+    }
+
+    // ---------- UI State ----------
+    console.log('!!! SCRIPT STARTING !!!');
+    const cubeCanvas = document.getElementById('cubeCanvas');
+    const imgCanvas  = document.getElementById('imgCanvas');
+    const cameraViewCanvas = document.getElementById('cameraViewCanvas');
+    console.log('cubeCanvas:', cubeCanvas);
+    console.log('imgCanvas:', imgCanvas);
+    console.log('cameraViewCanvas:', cameraViewCanvas);
+    if(!cubeCanvas) console.error('FATAL: cubeCanvas is null!');
+    if(!imgCanvas) console.error('FATAL: imgCanvas is null!');
+    if(!cameraViewCanvas) console.error('FATAL: cameraViewCanvas is null!');
+    
+    const list3d = document.getElementById('list3d');
+    const list2d = document.getElementById('list2d');
+    const projList = document.getElementById('projList');
+    const kpiN = document.getElementById('kpiN');
+    const kpiRMSE = document.getElementById('kpiRMSE');
+    const kpiRank = document.getElementById('kpiRank');
+    const statusEl = document.getElementById('status');
+    const decompEl = document.getElementById('decomp');
+
+    const rx = document.getElementById('rx');
+    const ry = document.getElementById('ry');
+    const rz = document.getElementById('rz');
+
+  // Dataset (loaded from rubiks_cube_3d_points.json for size=3). For other sizes, generate procedurally.
+  let dataset = null;
+
+    // UI refs
+  const setSel = document.getElementById('setSel');
+  const cubeNSel = document.getElementById('cubeN');
+    const useMM = document.getElementById('useMM');
+    const countBadge = document.getElementById('countBadge');
+
+    let worldSet = []; // current selectable set in UNITS or MM depending on toggle
+    let selected3D = []; // array of [X,Y,Z] in the same units as worldSet
+    let selected2D = []; // array of [u,v]
+    let lastDecomp = null; // {K, R, t, C}
+    
+    // Track mouse down/up for click detection (vs drag)
+    let mouseDownPos = null;
+    let isDragging = false;
+
+    // THREE.JS Setup for 3D visualization
+    let scene, camera, renderer, pointsMesh, cubeWireframe, selectedPointsMesh, controls;
+    let pointGeometry, pointMaterial, selectedGeometry, selectedMaterial;
+    let raycaster, mouse;
+    let cameraHelper = null; // Visual indicator for computed camera position/orientation
+    
+    // Camera view (external perspective showing camera anatomy)
+    let cameraScene, cameraViewCamera, cameraViewRenderer, cameraViewControls;
+    let cameraViewCube, cameraViewAxes, cameraViewGrid;
+    
+    function init3D(){
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a1a1a);
+      
+      // Camera - zoomed out to see full cube
+      const N = getN();
+      camera = new THREE.PerspectiveCamera(50, cubeCanvas.width/cubeCanvas.height, 0.1, 1000);
+      camera.position.set(N*2.5, N*2.5, N*2.5);  // Moved further back (was N*1.5)
+      camera.lookAt(N/2, N/2, N/2);
+      
+      // Renderer
+      renderer = new THREE.WebGLRenderer({canvas: cubeCanvas, antialias: true});
+      renderer.setSize(cubeCanvas.width, cubeCanvas.height);
+      
+      // OrbitControls for rotation - DISABLED to allow point selection
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.target.set(N/2, N/2, N/2);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.enabled = false; // Disable mouse interaction
+      controls.addEventListener('change', ()=> renderer.render(scene, camera));
+      
+      // Raycaster for picking - increase threshold for easier selection
+      raycaster = new THREE.Raycaster();
+      raycaster.params.Points.threshold = 1.0; // Much larger threshold for easier clicking
+      mouse = new THREE.Vector2();
+      
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+      directionalLight.position.set(10, 10, 10);
+      scene.add(directionalLight);
+      
+      // World origin axes (X=red, Y=green, Z=blue)
+      const axesHelper = new THREE.AxesHelper(getN() * 1.5); // Extend to 1.5x cube size
+      scene.add(axesHelper);
+      
+      // Add grid on XZ plane at Y=0 for reference
+      const gridHelper = new THREE.GridHelper(getN() * 2, 20, 0x444444, 0x222222);
+      gridHelper.position.y = 0;
+      scene.add(gridHelper);
+      
+      // Cube wireframe
+      const N_val = getN();
+      const cubeGeo = new THREE.BoxGeometry(N_val, N_val, N_val);
+      const cubeEdges = new THREE.EdgesGeometry(cubeGeo);
+      cubeWireframe = new THREE.LineSegments(cubeEdges, new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2}));
+      cubeWireframe.position.set(N_val/2, N_val/2, N_val/2);
+      scene.add(cubeWireframe);
+      
+      // Points geometry - larger points for easier selection
+      pointGeometry = new THREE.BufferGeometry();
+      pointMaterial = new THREE.PointsMaterial({color: 0x00ff00, size: 0.8, sizeAttenuation: true});
+      pointsMesh = new THREE.Points(pointGeometry, pointMaterial);
+      scene.add(pointsMesh);
+      
+      // Selected points - even larger and bright yellow
+      selectedGeometry = new THREE.BufferGeometry();
+      selectedMaterial = new THREE.PointsMaterial({color: 0xffff00, size: 1.2, sizeAttenuation: true});
+      selectedPointsMesh = new THREE.Points(selectedGeometry, selectedMaterial);
+      scene.add(selectedPointsMesh);
+      
+      // Animation loop
+      function animate(){
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+      
+      // Setup click handlers AFTER OrbitControls
+      setupClickHandlers();
+      
+      console.log('Three.js 3D viewer initialized');
+    }
+    
+    // Initialize camera anatomy view (external perspective)
+    function initCameraView(){
+      if(!cameraViewCanvas) return;
+      
+      // Scene
+      cameraScene = new THREE.Scene();
+      cameraScene.background = new THREE.Color(0x1a1a1a);
+      
+      // Camera - positioned to see both cube and camera
+      const N = getN();
+      cameraViewCamera = new THREE.PerspectiveCamera(50, cameraViewCanvas.width/cameraViewCanvas.height, 0.1, 1000);
+      cameraViewCamera.position.set(N*3, N*3, N*3); // Far back to see everything
+      cameraViewCamera.lookAt(N/2, N/2, N/2);
+      
+      // Renderer
+      cameraViewRenderer = new THREE.WebGLRenderer({canvas: cameraViewCanvas, antialias: true});
+      cameraViewRenderer.setSize(cameraViewCanvas.width, cameraViewCanvas.height);
+      
+      // OrbitControls enabled for this view
+      cameraViewControls = new THREE.OrbitControls(cameraViewCamera, cameraViewRenderer.domElement);
+      cameraViewControls.target.set(N/2, N/2, N/2);
+      cameraViewControls.enableDamping = true;
+      cameraViewControls.dampingFactor = 0.05;
+      cameraViewControls.addEventListener('change', ()=> cameraViewRenderer.render(cameraScene, cameraViewCamera));
+      
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      cameraScene.add(ambientLight);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+      directionalLight.position.set(10, 10, 10);
+      cameraScene.add(directionalLight);
+      
+      // World origin axes (larger)
+      cameraViewAxes = new THREE.AxesHelper(N * 2);
+      cameraScene.add(cameraViewAxes);
+      
+      // Grid on XZ plane
+      cameraViewGrid = new THREE.GridHelper(N * 3, 30, 0x444444, 0x222222);
+      cameraViewGrid.position.y = 0;
+      cameraScene.add(cameraViewGrid);
+      
+      // Cube wireframe
+      const cubeGeo = new THREE.BoxGeometry(N, N, N);
+      const cubeEdges = new THREE.EdgesGeometry(cubeGeo);
+      cameraViewCube = new THREE.LineSegments(cubeEdges, new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2}));
+      cameraViewCube.position.set(N/2, N/2, N/2);
+      cameraScene.add(cameraViewCube);
+      
+      // Animation loop
+      function animateCameraView(){
+        requestAnimationFrame(animateCameraView);
+        cameraViewControls.update();
+        cameraViewRenderer.render(cameraScene, cameraViewCamera);
+      }
+      animateCameraView();
+      
+      console.log('Camera anatomy view initialized');
+    }
+    
+    // Setup click handlers for point selection
+    function setupClickHandlers(){
+      console.log('!!! setupClickHandlers CALLED !!!');
+      console.log('Setting up click handlers on cubeCanvas');
+      console.log('cubeCanvas element:', cubeCanvas);
+      console.log('cubeCanvas is null?', cubeCanvas === null);
+      console.log('cubeCanvas type:', typeof cubeCanvas);
+      
+      if(!cubeCanvas){
+        console.error('FATAL: Cannot setup click handlers - cubeCanvas is null!');
+        return;
+      }
+      
+      // Use single-click to select points (OrbitControls disabled)
+      cubeCanvas.addEventListener('click', e=>{
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('Click detected for point selection');
+        
+        if(!renderer || !raycaster) {
+          console.log('Renderer or raycaster not initialized');
+          return;
+        }
+        
+        const rect = cubeCanvas.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / cubeCanvas.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / cubeCanvas.height) * 2 + 1;
+        
+        console.log(`Double-click at mouse coords: (${mouse.x.toFixed(2)}, ${mouse.y.toFixed(2)})`);
+        
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(pointsMesh);
+        
+        console.log(`Found ${intersects.length} intersections with points`);
+        console.log(`PointsMesh has ${pointGeometry.attributes.position ? pointGeometry.attributes.position.count : 0} points`);
+        console.log(`Raycaster threshold: ${raycaster.params.Points.threshold}`);
+        
+        if(intersects.length > 0){
+          const idx = intersects[0].index;
+          console.log(`Selected point index ${idx}: [${worldSet[idx].join(', ')}]`);
+          if(idx < worldSet.length){
+            const alreadySelected = selected3D.some(p => p[0]===worldSet[idx][0] && p[1]===worldSet[idx][1] && p[2]===worldSet[idx][2]);
+            if(alreadySelected){
+              console.log('Point already selected - skipping');
+              return;
+            }
+            selected3D.push(worldSet[idx]); 
+            console.log(`Total selected points: ${selected3D.length}`);
+            console.log('All selected points:', selected3D);
+            updateLists(); 
+            drawCube();
+          }
+        } else {
+          // Fallback: find nearest point in screen space
+          console.log('Raycaster failed, trying screen-space nearest point...');
+          
+          let nearestIdx = -1;
+          let nearestDist = Infinity;
+          
+          for(let i=0; i<worldSet.length; i++){
+            const worldPos = new THREE.Vector3(worldSet[i][0], worldSet[i][1], worldSet[i][2]);
+            const screenPos = worldPos.project(camera);
+            const dx = screenPos.x - mouse.x;
+            const dy = screenPos.y - mouse.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            
+            if(dist < nearestDist){
+              nearestDist = dist;
+              nearestIdx = i;
+            }
+          }
+          
+          console.log(`Nearest point: index ${nearestIdx}, distance ${nearestDist.toFixed(3)}`);
+          
+          if(nearestIdx >= 0 && nearestDist < 0.1){
+            const alreadySelected = selected3D.some(p => p[0]===worldSet[nearestIdx][0] && p[1]===worldSet[nearestIdx][1] && p[2]===worldSet[nearestIdx][2]);
+            if(alreadySelected){
+              console.log('Point already selected - skipping');
+              return;
+            }
+            console.log(`Selecting nearest point: [${worldSet[nearestIdx].join(', ')}]`);
+            selected3D.push(worldSet[nearestIdx]); 
+            console.log(`Total selected points: ${selected3D.length}`);
+            console.log('All selected points:', selected3D);
+            updateLists(); 
+            drawCube();
+          } else {
+            console.log('No point close enough - try double-clicking closer to a green dot');
+          }
+        }
+      }, true); // Use capture phase
+    }
+
+    // Current cube size (number of small boxes per edge). Default 3.
+    function getN(){ return Math.max(2, parseInt(cubeNSel.value||'3',10)); }
+
+    function drawCube(){
+      console.log('drawCube called, renderer exists:', !!renderer);
+      if(!renderer) init3D();
+      
+      console.log(`drawCube: worldSet has ${worldSet.length} points, selected3D has ${selected3D.length} points`);
+      
+      // Update cube wireframe size
+      const N = getN();
+      scene.remove(cubeWireframe);
+      const cubeGeo = new THREE.BoxGeometry(N, N, N);
+      const cubeEdges = new THREE.EdgesGeometry(cubeGeo);
+      cubeWireframe = new THREE.LineSegments(cubeEdges, new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2}));
+      cubeWireframe.position.set(N/2, N/2, N/2);
+      scene.add(cubeWireframe);
+      
+      // Update camera position and controls target - zoomed out
+      camera.position.set(N*2.5, N*2.5, N*2.5);  // Moved further back
+      controls.target.set(N/2, N/2, N/2);
+      controls.update();
+      
+      // Update all points
+      if(worldSet.length > 0){
+        const positions = new Float32Array(worldSet.length * 3);
+        worldSet.forEach((p, i) => {
+          positions[i*3] = p[0];
+          positions[i*3+1] = p[1];
+          positions[i*3+2] = p[2];
+        });
+        pointGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        pointGeometry.attributes.position.needsUpdate = true;
+      } else {
+        pointGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+      }
+      
+      // Update selected points
+      console.log(`Updating ${selected3D.length} selected points for display`);
+      if(selected3D.length > 0){
+        const selPositions = new Float32Array(selected3D.length * 3);
+        selected3D.forEach((p, i) => {
+          selPositions[i*3] = p[0];
+          selPositions[i*3+1] = p[1];
+          selPositions[i*3+2] = p[2];
+          console.log(`  Selected point ${i+1}: [${p[0]}, ${p[1]}, ${p[2]}]`);
+        });
+        selectedGeometry.setAttribute('position', new THREE.BufferAttribute(selPositions, 3));
+        selectedGeometry.attributes.position.needsUpdate = true;
+      } else {
+        selectedGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
+      }
+    }
+
+    function updateLists(){
+      const mm = useMM.checked ? ((dataset && dataset.units && dataset.units.scale_mm_per_unit) || 19) : 1.0;
+      // Display coordinates: if useMM is checked, show mm; otherwise show units
+      list3d.innerHTML = selected3D.map((p,i)=>{
+        const display = useMM.checked ? p.map(v=>(v*mm).toFixed(2)) : p.map(v=>v.toFixed(2));
+        const unit = useMM.checked ? ' mm' : ' u';
+        return `#${i+1}: [${display.join(', ')}]${unit}`;
+      }).join('<br/>');
+      list2d.innerHTML = selected2D.map((p,i)=>`#${i+1}: [${p.map(v=>v.toFixed(1)).join(', ')}] px (image)`).join('<br/>');
+      kpiN.textContent = String(Math.min(selected3D.length, selected2D.length));
+    }
+
+    document.getElementById('undo3d').onclick = ()=>{ selected3D.pop(); updateLists(); drawCube(); };
+    document.getElementById('clear3d').onclick = ()=>{ selected3D=[]; updateLists(); drawCube(); };
+    // Remove old rotation sliders functionality
+    rx.oninput = ry.oninput = rz.oninput = ()=>{}; // OrbitControls handles rotation now
+
+    // ----------- 2D image canvas -----------
+    const imgCtx = imgCanvas.getContext('2d');
+    let imgObj = new Image();
+    let lastP = null, lastW = [], lastI = [];
+    let imgTransform = {scale:1, offsetX:0, offsetY:0, imgW:1, imgH:1}; // canvas to image transform
+    
+    function drawImage(){
+      imgCtx.clearRect(0,0,imgCanvas.width,imgCanvas.height);
+      if(!imgObj.complete || !imgObj.naturalWidth) return;
+      // fit image into canvas preserving aspect
+      const cw=imgCanvas.width, ch=imgCanvas.height; const iw=imgObj.naturalWidth, ih=imgObj.naturalHeight;
+      const s=Math.min(cw/iw, ch/ih); const w=iw*s, h=ih*s; const x=(cw-w)/2, y=(ch-h)/2;
+      imgCtx.drawImage(imgObj, x,y,w,h);
+      // Store transform for canvas→image coordinate conversion
+      imgTransform = {scale:s, offsetX:x, offsetY:y, imgW:iw, imgH:ih};
+      
+      // Display image resolution
+      document.getElementById('imageInfo').textContent = 
+        `Image: ${iw}×${ih}px (canvas: ${cw}×${ch}, scale: ${s.toFixed(4)})`;
+      
+      // draw points (in canvas coordinates)
+      imgCtx.fillStyle = '#ff5722';
+      imgCtx.strokeStyle = '#ff5722';
+      imgCtx.lineWidth = 2;
+      for(let i=0;i<selected2D.length;i++){
+        const [u_img, v_img]=selected2D[i]; // image coords
+        // Convert image coords back to canvas coords for drawing
+        const u_canvas = imgTransform.offsetX + u_img * imgTransform.scale;
+        const v_canvas = imgTransform.offsetY + v_img * imgTransform.scale;
+        imgCtx.beginPath(); imgCtx.arc(u_canvas, v_canvas, 4, 0, Math.PI*2); imgCtx.fill();
+        imgCtx.fillText(String(i+1), u_canvas+6, v_canvas-6);
+      }
+
+      // overlay reprojected points if available
+      if(lastP && lastW.length && lastI.length && lastW.length===lastI.length){
+        imgCtx.strokeStyle = '#2e7d32'; imgCtx.fillStyle = '#2e7d32';
+        for(let i=0;i<lastW.length;i++){
+          const [uh, vh] = projectPoint(lastP, [lastW[i][0], lastW[i][1], lastW[i][2], 1]);
+          // uh, vh are in image coordinates; convert to canvas
+          const u_canvas = imgTransform.offsetX + uh * imgTransform.scale;
+          const v_canvas = imgTransform.offsetY + vh * imgTransform.scale;
+          imgCtx.beginPath(); imgCtx.arc(u_canvas, v_canvas, 3, 0, Math.PI*2); imgCtx.fill();
+          // small crosshair
+          imgCtx.beginPath(); imgCtx.moveTo(u_canvas-5, v_canvas); imgCtx.lineTo(u_canvas+5, v_canvas); imgCtx.moveTo(u_canvas, v_canvas-5); imgCtx.lineTo(u_canvas, v_canvas+5); imgCtx.stroke();
+        }
+      }
+    }
+
+    imgCanvas.addEventListener('click', e=>{
+      const rect = imgCanvas.getBoundingClientRect();
+      const u_canvas = e.clientX - rect.left;
+      const v_canvas = e.clientY - rect.top;
+      // Convert canvas coordinates to actual image coordinates
+      const u_img = (u_canvas - imgTransform.offsetX) / imgTransform.scale;
+      const v_img = (v_canvas - imgTransform.offsetY) / imgTransform.scale;
+      // Only accept clicks within the image bounds
+      if(u_img >= 0 && u_img <= imgTransform.imgW && v_img >= 0 && v_img <= imgTransform.imgH){
+        selected2D.push([u_img, v_img]);
+        updateLists();
+        drawImage();
+      }
+    });
+
+    document.getElementById('undo2d').onclick = ()=>{ selected2D.pop(); updateLists(); drawImage(); };
+    document.getElementById('clear2d').onclick = ()=>{ selected2D=[]; updateLists(); drawImage(); };
+    document.getElementById('loadDefault').onclick = ()=>{ imgObj.src = '20241104_110454.jpg'; };
+    document.getElementById('imgfile').addEventListener('change', ev=>{
+      const f=ev.target.files[0]; if(f){ const url=URL.createObjectURL(f); imgObj.src=url; }
+    });
+    imgObj.onload = drawImage;
+
+    // Export/import correspondences
+    document.getElementById('exportCorr').onclick = ()=>{
+      const data = { world: selected3D, image: selected2D };
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'correspondences.json'; a.click();
+    };
+    document.getElementById('importCorr').addEventListener('change', ev=>{
+      const f = ev.target.files[0]; if(!f) return; const rd = new FileReader();
+      rd.onload = ()=>{
+        try{
+          const obj = JSON.parse(rd.result);
+          if(Array.isArray(obj.world) && Array.isArray(obj.image)){
+            selected3D = obj.world.map(p=>[+p[0],+p[1],+p[2]]);
+            selected2D = obj.image.map(p=>[+p[0],+p[1]]);
+            updateLists(); drawCube(); drawImage();
+          }
+        }catch(e){ console.error(e); }
+      };
+      rd.readAsText(f);
+    });
+
+    // ----------- Run DLT -----------
+
+    function fillPTable(P){
+      const tb = document.querySelector('#ptable tbody');
+      tb.innerHTML = '';
+      for(let i=0;i<3;i++){
+        const tr=document.createElement('tr');
+        for(let j=0;j<4;j++){
+          const td=document.createElement('td'); td.textContent = P[i][j].toFixed(6); tr.appendChild(td);
+        }
+        tb.appendChild(tr);
+      }
+    }
+
+    function showDecomp(decomp){
+      if(!decomp){ decompEl.innerHTML = 'Decomposition failed.'; return; }
+      const {K, R, t, C} = decomp;
+      const fmt = v => v.toFixed(4);
+      let html = '<strong>K (Intrinsic):</strong><br/>';
+      for(let i=0; i<3; i++){
+        html += '[' + K[i].map(fmt).join(', ') + ']<br/>';
+      }
+      html += '<br/><strong>R (Rotation):</strong><br/>';
+      for(let i=0; i<3; i++){
+        html += '[' + R[i].map(fmt).join(', ') + ']<br/>';
+      }
+      html += '<br/><strong>t (Translation):</strong> [' + t.map(fmt).join(', ') + ']<br/>';
+      html += '<br/><strong>Camera Center C:</strong> [' + C.map(fmt).join(', ') + '] (world units)<br/>';
+      // Focal lengths and principal point
+      const fx = K[0][0], fy = K[1][1], cx = K[0][2], cy = K[1][2];
+      html += '<br/><em>f<sub>x</sub>=' + fmt(fx) + ' px, f<sub>y</sub>=' + fmt(fy) + ' px</em><br/>';
+      
+      // Show principal point with image context
+      const imgW = imgTransform ? imgTransform.imgW : 0;
+      const imgH = imgTransform ? imgTransform.imgH : 0;
+      html += '<em>Principal pt: (' + fmt(cx) + ', ' + fmt(cy) + ') px</em>';
+      if(imgW > 0 && imgH > 0){
+        const centerX = imgW / 2;
+        const centerY = imgH / 2;
+        const offsetX = cx - centerX;
+        const offsetY = cy - centerY;
+        html += '<br/><em style="color:#666;">Image center: (' + centerX.toFixed(1) + ', ' + centerY.toFixed(1) + ')</em>';
+        html += '<br/><em style="color:#666;">Offset from center: (' + offsetX.toFixed(1) + ', ' + offsetY.toFixed(1) + ') px</em>';
+        
+        // Warning if principal point is way outside image
+        if(cx < 0 || cx > imgW || cy < 0 || cy > imgH){
+          html += '<br/><strong style="color:#d32f2f;">⚠ Principal point outside image bounds!</strong>';
+        }
+      }
+      
+      decompEl.innerHTML = html;
+    }
+
+    function listReproj(P, worldPts, imagePts){
+      const lines = [];
+      for(let i=0;i<worldPts.length;i++){
+        const [X,Y,Z] = worldPts[i];
+        const [u,v] = imagePts[i];
+        const [uh, vh] = projectPoint(P, [X,Y,Z,1]);
+        lines.push(`#${i+1}: [${u.toFixed(1)}, ${v.toFixed(1)}] → [${uh.toFixed(1)}, ${vh.toFixed(1)}]  Δ=(${(u-uh).toFixed(2)}, ${(v-vh).toFixed(2)})`);
+      }
+      projList.innerHTML = lines.join('<br/>');
+    }
+
+    document.getElementById('runDLT').onclick = async ()=>{
+      statusEl.textContent = 'Calling Python backend...';
+      const n = Math.min(selected3D.length, selected2D.length);
+      if(n < 6){ statusEl.textContent = 'Need at least 6 correspondences.'; return; }
+      
+      const W = selected3D.slice(0,n);
+      const I = selected2D.slice(0,n);
+      
+      try{
+        const response = await fetch('http://localhost:8765/compute_dlt', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            world_points: W,
+            image_points: I
+          })
+        });
+        
+        if(!response.ok){
+          throw new Error('Backend request failed. Is dlt_server.py running on port 8765?');
+        }
+        
+        const result = await response.json();
+        
+        if(!result.success){
+          throw new Error(result.error || 'Backend computation failed');
+        }
+        
+        const P = result.P;
+        fillPTable(P);
+        
+        // Use backend decomposition
+        lastDecomp = {
+          K: result.K,
+          R: result.R,
+          t: result.t,
+          C: result.C
+        };
+        showDecomp(lastDecomp);
+        
+        kpiRMSE.textContent = result.rmse.toFixed(3);
+        kpiRank.textContent = String(result.rank);
+        
+        // Reprojection list
+        listReproj(P, W, I);
+        
+        lastP = P; lastW = W; lastI = I;
+        statusEl.textContent = 'OK (Python backend)';
+        drawImage();
+        drawCube();
+        
+      }catch(err){
+        console.error(err);
+        statusEl.textContent = 'Error: ' + err.message;
+      }
+    };
+
+    // Local JS computation (original)
+    // ---------- Load dataset and initialize ----------
+    function updateWorldSet(){
+      const N = getN();
+      const opt = setSel.value;
+
+      // Helpers to procedurally generate sets for arbitrary N
+      const genCorners = (N)=>{
+        const c=[]; for(const x of [0,N]) for(const y of [0,N]) for(const z of [0,N]) c.push([x,y,z]); return c;
+      };
+      const genVertices = (N)=>{
+        const v=[]; for(let x=0;x<=N;x++) for(let y=0;y<=N;y++) for(let z=0;z<=N;z++) v.push([x,y,z]); return v;
+      };
+      
+      // Generate Rubik's cube visible points: all integer grid points from 0 to N
+      // For 3×3×3 this gives 4×4×4 = 64 points at integer coordinates
+      const genRubiksCube = (N)=>{
+        const pts = [];
+        for(let x=0; x<=N; x++){
+          for(let y=0; y<=N; y++){
+            for(let z=0; z<=N; z++){
+              pts.push([x, y, z]);
+            }
+          }
+        }
+        return pts;
+      };
+
+      // Generate points based on selected option
+      let pts = [];
+      if(opt==='rubiks') {
+        pts = genRubiksCube(N);
+      } else if(opt==='corners') {
+        pts = genCorners(N);
+      } else if(opt==='vertices') {
+        pts = genVertices(N);
+      } else {
+        // Default to rubiks cube
+        pts = genRubiksCube(N);
+      }
+
+      // ALWAYS store in UNITS (not mm) for DLT computation
+      worldSet = pts.map(p=>[p[0], p[1], p[2]]);
+      countBadge.textContent = `${worldSet.length} pts`;
+      console.log(`updateWorldSet: Generated ${worldSet.length} points for option '${opt}', N=${N}`);
+      if(worldSet.length > 0) console.log('First 3 points:', worldSet.slice(0,3));
+      // Only clear selected3D when changing point set or cube size, not when toggling mm display
+      selected3D = [];
+      updateLists();
+      drawCube();
+    }
+
+    fetch('./rubiks_cube_3d_points.json')
+      .then(r=>r.json())
+      .then(js=>{ dataset=js; updateWorldSet(); })
+      .catch(err=>{ console.warn('Dataset load failed, falling back to generated sets.', err);
+        // Fallback: generate sets procedurally
+        const corners = [ [0,0,0],[3,0,0],[3,3,0],[0,3,0],[0,0,3],[3,0,3],[3,3,3],[0,3,3] ].map(p=>({units:p}));
+        const v444 = [];
+        for(let x=0;x<=3;x++) for(let y=0;y<=3;y++) for(let z=0;z<=3;z++) v444.push({units:[x,y,z]});
+        const centers = [];
+        for(let i=0;i<3;i++) for(let j=0;j<3;j++) for(let k=0;k<3;k++) centers.push({units:[i+0.5,j+0.5,k+0.5]});
+        const face = (axis,neg)=>{
+          const coords=[0.5,1.5,2.5]; const out=[];
+          for(const a of coords){ for(const b of coords){
+            if(axis==='x') out.push({units:[neg?0.5:2.5, a, b]});
+            if(axis==='y') out.push({units:[a, neg?0.5:2.5, b]});
+            if(axis==='z') out.push({units:[a, b, neg?0.5:2.5]});
+          }}
+          return out;
+        };
+        dataset = {
+          units: { scale_mm_per_unit: 19 },
+          corner_vertices: corners,
+          vertices_4x4x4: v444,
+          cubelet_centers_3x3x3: centers,
+          facelet_centers: {
+            x_neg: face('x',true), x_pos: face('x',false),
+            y_neg: face('y',true), y_pos: face('y',false),
+            z_neg: face('z',true), z_pos: face('z',false)
+          }
+        };
+        updateWorldSet();
+      });
+
+    setSel.onchange = updateWorldSet;
+    useMM.onchange = updateLists; // Only update display, don't regenerate points or clear selections
+    cubeNSel.onchange = updateWorldSet;
+
+    // Align 3D cube view to match camera orientation
+    document.getElementById('alignCube').onclick = ()=>{
+      if(!lastDecomp){ alert('Compute P first.'); return; }
+      if(!cameraScene || !cameraViewRenderer){ 
+        initCameraView(); // Initialize if not already done
+      }
+
+      const {K, R, t, C} = lastDecomp;
+
+      // Remove old camera helper if exists
+      if(cameraHelper){
+        cameraScene.remove(cameraHelper);
+        cameraHelper = null;
+      }
+
+      // Use camera center C from server decomposition
+      console.log('Camera center C:', C);
+      console.log('Rotation matrix R:', R);
+      console.log('Translation t:', t);
+
+      // Create a visual representation of the computed camera
+      const cameraGroup = new THREE.Group();
+
+      // Camera center as a sphere
+      const cameraSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 16, 16),
+        new THREE.MeshBasicMaterial({color: 0xff0000})
+      );
+      cameraSphere.position.set(C[0], C[1], C[2]);
+      cameraGroup.add(cameraSphere);
+
+      // Camera axes at camera center (showing camera orientation)
+      const cameraAxes = new THREE.AxesHelper(3);
+      cameraAxes.position.set(C[0], C[1], C[2]);
+
+      // Build rotation matrix from R (Three.js expects column-major)
+      // R is 3x3, so flatten to 9 elements
+      const rotMatrix = new THREE.Matrix4();
+      rotMatrix.makeBasis(
+        new THREE.Vector3(R[0][0], R[1][0], R[2][0]), // X axis
+        new THREE.Vector3(R[0][1], R[1][1], R[2][1]), // Y axis
+        new THREE.Vector3(R[0][2], R[1][2], R[2][2])  // Z axis
+      );
+      cameraAxes.setRotationFromMatrix(rotMatrix);
+      cameraGroup.add(cameraAxes);
+
+      // Draw optical axis as an arrow from C in the -R[2,:] direction
+      const opticalDir = new THREE.Vector3(-R[2][0], -R[2][1], -R[2][2]);
+      const arrowLength = 6; // Make it long enough to be visible
+      const arrowHelper = new THREE.ArrowHelper(
+        opticalDir.clone().normalize(),
+        new THREE.Vector3(C[0], C[1], C[2]),
+        arrowLength,
+        0xff00ff, // magenta
+        1.2, // head length
+        0.8  // head width
+      );
+      cameraGroup.add(arrowHelper);
+
+      // Optionally, draw a line from C to cube center for reference
+      const N = getN();
+      const cubeCenter = new THREE.Vector3(N/2, N/2, N/2);
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(C[0], C[1], C[2]),
+        cubeCenter
+      ]);
+      const line = new THREE.Line(
+        lineGeometry,
+        new THREE.LineBasicMaterial({color: 0x8888ff, linewidth: 2})
+      );
+      cameraGroup.add(line);
+
+
+      cameraHelper = cameraGroup;
+      cameraScene.add(cameraHelper);
+
+      cameraViewRenderer.render(cameraScene, cameraViewCamera);
+
+      console.log('Camera visualization added at position:', C);
+    };
+
+    // Initial draw of image (cube will be drawn when dataset loads in updateWorldSet)
+    drawImage();
+    
+    // Initialize camera anatomy view
+    initCameraView();
+  </script>
+</body>
+  <div class="panel" style="max-width:800px; margin:32px auto;">
+    <h2 style="color: #6B1C23; border-bottom: 3px solid #6B1C23; padding-bottom: 8px;">DLT Calibration & Decomposition Algorithm</h2>
+    <div class="content">
+      <div class="note" style="margin-bottom:16px; font-size:14px; background:#ffe0e0; color:#a00; border-left: 5px solid #a00;">
+        <strong>⚠ Implementation Note:</strong> This implementation <u>does NOT use normalization</u> (MATLAB style DLT). Raw coordinates are used for both 2D and 3D points.
+      </div>
+      
+      <div style="background: #f9f9f9; border-radius: 6px; padding: 12px; margin-bottom: 16px; border-left: 4px solid #00205B;">
+        <h3 style="margin-top: 0; color: #00205B; font-size: 14px;">Phase 1: Data Collection</h3>
+        <ol style="font-size: 14px; line-height: 1.8; margin: 8px 0;">
+          <li style="margin-bottom: 8px;"><strong>Collect Correspondences:</strong> Select at least 6 non-coplanar 3D points and their matching 2D image points.</li>
+        </ol>
+      </div>
+
+      <div style="background: #f9f9f9; border-radius: 6px; padding: 12px; margin-bottom: 16px; border-left: 4px solid #00205B;">
+        <h3 style="margin-top: 0; color: #00205B; font-size: 14px;">Phase 2: Linear System Setup</h3>
+        <ol style="font-size: 14px; line-height: 1.8; margin: 8px 0; counter-reset: list-counter; list-style-type: none;">
+          <li style="margin-bottom: 8px;"><strong>2. Build DLT Matrix:</strong> Construct the linear system <code>A</code> from the correspondences for <code>P</code> (camera matrix).</li>
+          <li style="margin-bottom: 8px;"><strong>3. Solve for P:</strong> Use SVD to solve $A \mathbf{p} = 0$ for $\mathbf{p}$ (vectorized $P$), take the last column of $V$.</li>
+          <li style="margin-bottom: 8px;"><strong>4. Reshape P:</strong> Reshape $\mathbf{p}$ to $P$ (3×4 matrix).</li>
+        </ol>
+      </div>
+
+      <div style="background: #f9f9f9; border-radius: 6px; padding: 12px; margin-bottom: 16px; border-left: 4px solid #00205B;">
+        <h3 style="margin-top: 0; color: #00205B; font-size: 14px;">Phase 3: Matrix Decomposition</h3>
+        <ol style="font-size: 14px; line-height: 1.8; margin: 8px 0; counter-reset: list-counter; list-style-type: none;">
+          <li style="margin-bottom: 8px;"><strong>5. Decompose P:</strong> Partition $P = [M | p_4]$ where $M$ is 3×3, $p_4$ is translation.</li>
+          <li style="margin-bottom: 8px;"><strong>6. RQ/QR Decomposition:</strong> Decompose $M$ to get $K$ (intrinsic) and $R$ (rotation). Normalize $K$ so $K[2,2]=1$.</li>
+          <li style="margin-bottom: 8px;"><strong>7. Fix Reflection:</strong> If $\det(R) < 0$, flip signs of $K[2,:]$ and $R[:,2]$ to ensure proper rotation.</li>
+        </ol>
+      </div>
+
+      <div style="background: #f9f9f9; border-radius: 6px; padding: 12px; margin-bottom: 16px; border-left: 4px solid #00205B;">
+        <h3 style="margin-top: 0; color: #00205B; font-size: 14px;">Phase 4: Extrinsic Parameters & Validation</h3>
+        <ol style="font-size: 14px; line-height: 1.8; margin: 8px 0; counter-reset: list-counter; list-style-type: none;">
+          <li style="margin-bottom: 8px;"><strong>8. Compute t:</strong> $t = K^{-1} p_4$; scale $t$ by dividing by $K[2,2]$ if $K$ was normalized.</li>
+          <li style="margin-bottom: 8px;"><strong>9. Camera Center C:</strong> $C = -R^T t$ (the true camera center in world coordinates).</li>
+          <li style="margin-bottom: 8px;"><strong>10. Orientation Check:</strong> If camera faces away from scene, flip $R$ and $t$ so $-R[2,:]$ points toward the scene center.</li>
+        </ol>
+      </div>
+
+      <div class="note" style="margin-top: 10px; font-size: 13px; background: #e8f4f8; border-left: 4px solid #00205B;">
+        <strong>📚 References:</strong> Hartley & Zisserman, <em>Multiple View Geometry</em>; MATLAB Camera Calibration Toolbox; OpenCV camera calibration docs.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

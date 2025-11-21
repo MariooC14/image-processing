@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Assignment: DLT Camera Calibration</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Assignment: DLT Camera Calibration</h1>
+</header>
+<h1 id="assignment-dlt-camera-calibration-lab">Assignment: DLT Camera
+Calibration Lab</h1>
+<p><strong>Course:</strong> Digital Image Processing (CT-4109)<br />
+<strong>Assignment Type:</strong> Practical Lab Exercise<br />
+<strong>Marks:</strong> 25<br />
+<strong>Due Date:</strong> 27, Nov, 2025</p>
+<hr />
+<h2 id="objectives">Objectives</h2>
+<p>By completing this lab, you will: - Understand the Direct Linear
+Transform (DLT) algorithm for camera calibration - Learn the importance
+of point selection (coplanar vs. non-coplanar)</p>
+<hr />
+<h2 id="part-1-basic-calibration-13-marks">Part 1: Basic Calibration (13
+marks)</h2>
+<h3 id="task-1.1-three-calibration-trials-6-marks">Task 1.1: Three
+Calibration Trials (6 marks)</h3>
+<p>Perform <strong>three independent calibration trials</strong> using
+the DLT demo. For each trial:</p>
+<ol type="1">
+<li><strong>Start fresh</strong>: Clear all points and begin new
+selection</li>
+<li><strong>Select points</strong>: Choose at least 10 point pairs
+(3D-2D correspondences)
+<ul>
+<li>Use <strong>different point types</strong> each time (corners,
+edges, cubelet centers, etc.)</li>
+<li>Select points carefully and accurately</li>
+</ul></li>
+<li><strong>Compute DLT</strong>: Click “Compute DLT” button</li>
+<li><strong>Record results</strong> in a table:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Trial</th>
+<th>Point Type</th>
+<th># Points</th>
+<th>RMSE (pixels)</th>
+<th>fx</th>
+<th>fy</th>
+<th>cx</th>
+<th>cy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<ol start="5" type="1">
+<li><strong>Export data</strong>: Use “Export Points (JSON)” and save as
+<code>trial1.json</code>, <code>trial2.json</code>,
+<code>trial3.json</code></li>
+</ol>
+<p><strong>Deliverable (6 marks):</strong> - Completed table with all
+three trials - Three JSON files with your point correspondences -
+Screenshot of reprojection visualization for your <strong>best
+trial</strong> (lowest RMSE)</p>
+<h3 id="task-1.2-identify-best-configuration-7-marks">Task 1.2: Identify
+Best Configuration (7 marks)</h3>
+<p><strong>Questions:</strong></p>
+<ol type="a">
+<li><p>(3 marks) Which trial gave the <strong>lowest reprojection
+error</strong>? What point type did you use?</p></li>
+<li><p>(4 marks) Compare your three trials. What pattern do you observe
+about point type and accuracy? Explain why certain point types perform
+better.</p></li>
+</ol>
+<hr />
+<h2 id="part-2-normalization-analysis-12-marks">Part 2: Normalization
+Analysis (12 marks)</h2>
+<p>The Python code (<code>dlt_server.py</code>) includes normalization
+functions but <strong>they are not currently used</strong> in the main
+computation. Your task is to <strong>implement normalized DLT</strong>
+and compare results.</p>
+<h3 id="task-2.1-code-inspection-4-marks">Task 2.1: Code Inspection (4
+marks)</h3>
+<p>Open <code>dlt_server.py</code> and locate: -
+<code>normalize_2d(pts)</code> function (line ~20) -
+<code>normalize_3d(pts)</code> function (line ~36) -
+<code>compute_dlt(world_pts, image_pts)</code> function (line ~68)</p>
+<p><strong>Question:</strong></p>
+<ol type="a">
+<li>(2 marks) What do the normalization functions do? Describe the
+steps:
+<ul>
+<li>Centroid translation</li>
+<li>Scaling factor computation</li>
+<li>Transformation matrix T (for 2D) or U (for 3D)</li>
+</ul></li>
+</ol>
+<h3 id="task-2.2-implement-normalized-dlt-8-marks">Task 2.2: Implement
+Normalized DLT (8 marks)</h3>
+<p><strong>Modify <code>compute_dlt()</code> to use
+normalization:</strong></p>
+<p>Currently (around line 77-82), the function builds matrix A
+directly:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>A <span class="op">=</span> build_A(world_pts, image_pts)</span></code></pre></div>
+<p><strong>Your task:</strong> Modify the code to:</p>
+<ol type="1">
+<li><p><strong>Normalize 2D points:</strong></p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>T, image_pts_norm <span class="op">=</span> normalize_2d(image_pts)</span></code></pre></div></li>
+<li><p><strong>Normalize 3D points:</strong></p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>U, world_pts_norm <span class="op">=</span> normalize_3d(world_pts)</span></code></pre></div></li>
+<li><p><strong>Build A from normalized points:</strong></p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>A <span class="op">=</span> build_A(world_pts_norm, image_pts_norm)</span></code></pre></div></li>
+<li><p><strong>Compute P_tilde from SVD</strong> (same as
+before)</p></li>
+<li><p><strong>Denormalize to get final P:</strong></p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>P <span class="op">=</span> np.linalg.inv(T) <span class="op">@</span> P_tilde <span class="op">@</span> U</span></code></pre></div></li>
+</ol>
+<p><strong>Deliverable:</strong> - Modified <code>dlt_server.py</code>
+with your changes clearly marked with comments:
+<code>python   # === NORMALIZATION ADDED BY [YOUR NAME] ===   # Your code here   # === END MODIFICATION ===</code>
+- Include the complete modified <code>compute_dlt()</code> function</p>
+<p><strong>Questions:</strong></p>
+<ol type="a">
+<li><p>(2 marks) Did normalization reduce the reprojection error? By how
+much (percentage or absolute)?</p></li>
+<li><p>(2 marks) Explain WHY normalization helps DLT. What numerical
+problem does it address?</p></li>
+</ol>
+<hr />
+<h2 id="submission-guidelines">Submission Guidelines</h2>
+<p>Create a <strong>single PDF document</strong> containing:</p>
+<ol type="1">
+<li><strong>Cover Page</strong>:
+<ul>
+<li>Your name and student ID</li>
+<li>Assignment title: “DLT Camera Calibration Lab”</li>
+<li>py code</li>
+</ul></li>
+</ol>
+<h3 id="file-naming">File Naming</h3>
+<ul>
+<li>PDF: <code>StudentID_DLT_Lab.pdf</code></li>
+<li>Code: <code>StudentID_dlt_server.py</code></li>
+</ul>
+<p>Zip all the files and submit one zip.</p>
+<hr />
+<h2 id="help-resources">Help &amp; Resources</h2>
+<h3 id="if-you-get-stuck">If You Get Stuck</h3>
+<ol type="1">
+<li><strong>Read the README.md</strong> for setup instructions</li>
+<li><strong>Check lecture slides</strong> on DLT and normalization</li>
+<li><strong>Python errors</strong>: Check console output when running
+server</li>
+<li><strong>High errors</strong>: Try different point selections</li>
+</ol>
+<h3 id="contact">Contact</h3>
+<p>📧 waqarshahid.qureshi@universityofgalway.ie</p>
+<hr />
+<p><strong>University of Galway</strong><br />
+<em>School of Computer Science</em><br />
+Digital Image Processing - CT-4109</p>
+</body>
+</html>

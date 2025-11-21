@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>DLT Camera Calibration Demo</title>
+  <style>
+    /* University of Galway Custom Theme */
+    html {
+      color: #333333;
+      background-color: #ffffff;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 48em;
+      padding: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #9d2235;
+    }
+    a:visited {
+      color: #7a1a2a;
+    }
+    a:hover {
+      color: #7a1a2a;
+      text-decoration: underline;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+      color: #9d2235;
+      font-weight: 600;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 4px solid #9d2235;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+      background-color: #f8f8f8;
+      border-left: 4px solid #9d2235;
+      padding: 1em;
+      border-radius: 4px;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 2px solid #9d2235;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 2px solid #9d2235;
+      border-bottom: 2px solid #9d2235;
+    }
+    th {
+      border-top: 2px solid #9d2235;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+      background-color: #f8f8f8;
+      font-weight: 600;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">DLT Camera Calibration Demo</h1>
+</header>
+<h1 id="dlt-camera-calibration-demo">DLT Camera Calibration Demo</h1>
+<h2 id="overview">Overview</h2>
+<p>This interactive demo allows you to perform <strong>Direct Linear
+Transform (DLT)</strong> camera calibration using a 3D Rubik’s Cube as
+the calibration target. You’ll learn how to estimate the camera
+projection matrix <strong>P</strong> from 3D-2D point
+correspondences.</p>
+<h2 id="whats-included">What’s Included</h2>
+<ul>
+<li><code>dlt_rubiks_demo.html</code> - Interactive web-based
+calibration interface</li>
+<li><code>dlt_server.py</code> - Python backend for DLT computation</li>
+<li><code>README.md</code> - This file</li>
+<li><code>Assignment_DLT_Calibration.md</code> - Student assignment
+instructions</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<h3 id="python-dependencies">Python Dependencies</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install numpy</span></code></pre></div>
+<p>Optional (for better decomposition):</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install opencv-python</span></code></pre></div>
+<h3 id="browser">Browser</h3>
+<ul>
+<li>Modern web browser (Chrome, Firefox, Edge, Safari)</li>
+<li>JavaScript enabled</li>
+</ul>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="step-1-start-the-python-server">Step 1: Start the Python
+Server</h3>
+<p>Open a terminal/command prompt in this folder and run:</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> dlt_server.py</span></code></pre></div>
+<p>You should see:</p>
+<pre><code>DLT Server running on http://localhost:8765
+Press Ctrl+C to stop</code></pre>
+<p><strong>Note:</strong> Keep this terminal window open while using the
+demo.</p>
+<h3 id="step-2-open-the-demo">Step 2: Open the Demo</h3>
+<p>Open <code>dlt_rubiks_demo.html</code> in your web browser: -
+<strong>Option 1:</strong> Double-click the HTML file - <strong>Option
+2:</strong> Right-click → Open with → Your browser - <strong>Option
+3:</strong> Drag the file into your browser window</p>
+<h3 id="step-3-perform-calibration">Step 3: Perform Calibration</h3>
+<ol type="1">
+<li><p><strong>Select 3D Point Type</strong> (left panel):</p>
+<ul>
+<li>Corners (8 points) - easiest, but coplanar</li>
+<li>Edges (12 points) - better, some depth variation</li>
+<li>4×4×4 Vertices (125 points) - excellent coverage</li>
+<li>3×3×3 Cubelet Centers (27 points) - good balance</li>
+<li>3×3 Facelet Centers (54 points) - moderate</li>
+</ul></li>
+<li><p><strong>Choose Units</strong>: “units” (1 cube = 3 units) or “mm”
+(1 cube = 57mm)</p></li>
+<li><p><strong>Click 3D Points</strong> on the cube (left canvas):</p>
+<ul>
+<li>Red circles show selected points</li>
+<li>Shows world coordinates (X, Y, Z)</li>
+</ul></li>
+<li><p><strong>Click Corresponding 2D Points</strong> on the image
+(middle canvas):</p>
+<ul>
+<li>Click the SAME feature in the image</li>
+<li>Yellow circles mark your selections</li>
+<li>Shows pixel coordinates (u, v)</li>
+</ul></li>
+<li><p><strong>Compute DLT</strong>:</p>
+<ul>
+<li>Need minimum 6 point pairs</li>
+<li>Click “Compute DLT” button</li>
+<li>View results: P matrix, reprojection error, camera parameters</li>
+</ul></li>
+<li><p><strong>Analyze Camera</strong> (right panel):</p>
+<ul>
+<li>Click “Align to Cube” to visualize camera position</li>
+<li>See decomposed K, R, t matrices</li>
+<li>View camera center location</li>
+</ul></li>
+</ol>
+<h2 id="understanding-the-results">Understanding the Results</h2>
+<h3 id="projection-matrix-p">Projection Matrix P</h3>
+<p>The 3×4 matrix that maps 3D world points to 2D image points:</p>
+<pre><code>P = K[R | t]</code></pre>
+<h3 id="reprojection-error-rmse">Reprojection Error (RMSE)</h3>
+<ul>
+<li>Measures accuracy in pixels</li>
+<li>Lower is better</li>
+<li>&lt; 1.0 pixel: Excellent</li>
+<li>1-3 pixels: Good</li>
+<li><blockquote>
+<p>5 pixels: Poor (check your point selections)</p>
+</blockquote></li>
+</ul>
+<h3 id="camera-parameters">Camera Parameters</h3>
+<ul>
+<li><strong>K</strong>: Intrinsic matrix (focal length, principal
+point)</li>
+<li><strong>R</strong>: Rotation matrix (camera orientation)</li>
+<li><strong>t</strong>: Translation vector</li>
+<li><strong>C</strong>: Camera center in world coordinates</li>
+</ul>
+<h2 id="tips-for-best-results">Tips for Best Results</h2>
+<ol type="1">
+<li><strong>Use Non-Coplanar Points</strong>: Select points with good 3D
+spread (depth variation)</li>
+<li><strong>Avoid Corners Only</strong>: Corners are all on the surface;
+use cubelet centers or 4×4×4 grid</li>
+<li><strong>Be Precise</strong>: Click accurately on both canvases</li>
+<li><strong>Use More Points</strong>: 12-20 points give better results
+than minimum 6</li>
+<li><strong>Check Reprojection</strong>: Red lines show errors; shorter
+= better</li>
+<li><strong>Export/Import</strong>: Save your correspondences to
+reproduce results</li>
+</ol>
+<h2 id="common-issues">Common Issues</h2>
+<h3 id="failed-to-fetch-error">“Failed to fetch” Error</h3>
+<ul>
+<li><strong>Problem</strong>: Python server not running</li>
+<li><strong>Solution</strong>: Start <code>dlt_server.py</code>
+first</li>
+</ul>
+<h3 id="high-reprojection-error">High Reprojection Error</h3>
+<ul>
+<li><strong>Problem</strong>: Inaccurate point clicking or coplanar
+points</li>
+<li><strong>Solution</strong>:
+<ul>
+<li>Use cubelet centers or 4×4×4 grid</li>
+<li>Click more carefully</li>
+<li>Use more point pairs</li>
+</ul></li>
+</ul>
+<h3 id="camera-faces-wrong-way">Camera Faces Wrong Way</h3>
+<ul>
+<li><strong>Problem</strong>: Normal for some point configurations</li>
+<li><strong>Solution</strong>: Code automatically orients camera toward
+scene center</li>
+</ul>
+<h2 id="theory-background">Theory Background</h2>
+<h3 id="dlt-algorithm">DLT Algorithm</h3>
+<ol type="1">
+<li>Build matrix A from point correspondences (2 equations per
+point)</li>
+<li>Solve Ap = 0 using SVD (Singular Value Decomposition)</li>
+<li>Reshape solution into 3×4 matrix P</li>
+<li>Optionally normalize points for better numerical stability</li>
+</ol>
+<h3 id="normalization">Normalization</h3>
+<p>The code includes Hartley normalization: - 2D points: translate to
+centroid, scale so mean distance = √2 - 3D points: translate to
+centroid, scale so mean distance = √3 - Improves numerical
+conditioning</p>
+<h3 id="decomposition">Decomposition</h3>
+<p>Given P, extract: - K (intrinsic): via RQ decomposition of M = P[:,
+:3] - R (rotation): from QR factorization - t (translation): from P[:,
+3] - C (camera center): from null space of P or C = -R^T·t</p>
+<h2 id="for-students">For Students</h2>
+<p>See <code>Assignment_DLT_Calibration.md</code> for your assignment
+instructions.</p>
+<h2 id="additional-resources">Additional Resources</h2>
+<ul>
+<li>Lecture slides on camera calibration</li>
+<li>Hartley &amp; Zisserman: “Multiple View Geometry in Computer
+Vision”</li>
+<li>OpenCV documentation on camera calibration</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>If you encounter issues: 1. Check that Python server is running 2.
+Verify browser console for errors (F12) 3. Ensure you have at least 6
+point pairs 4. Try different point selections 5. Use non-coplanar points
+for better results</p>
+<h2 id="contact">Contact</h2>
+<p>For questions or issues, contact your instructor: 📧
+waqarshahid.qureshi@universityofgalway.ie</p>
+<hr />
+<p><strong>University of Galway</strong><br />
+<em>School of Computer Science</em><br />
+Digital Image Processing - CT-4109</p>
+</body>
+</html>
